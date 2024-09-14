@@ -1,93 +1,299 @@
-# ZCU_102_Petalinux_Setup
+# ZCU102 PetaLinux Setup
+
+This repository provides scripts and detailed instructions for configuring, building, and flashing PetaLinux using a custom exported hardware design.
+
+Tested on Ubuntu 22.04.
+
+## Setup Instructions
+
+### 1. Download PetaLinux
+- Download the PetaLinux installer from the official [Xilinx website (PetaLinux 2022.1)](https://www.xilinx.com/member/forms/download/xef.html?filename=petalinux-v2022.1-04191534-installer.run). This guide uses version 2022.1.
+
+### 2. Prepare the Installation Directory
+- Copy the installer to the desired installation folder. In this guide, we use `/opt/Xilinx/Petalinux` as the target directory.
+
+### 3. Install PetaLinux
+- First, install the required prerequisite packages:
+
+    ```bash
+    sudo apt-get install gcc-multilib
+
+    # Add support for i386 packages
+    sudo dpkg --add-architecture i386
+
+    sudo apt-get install zlib1g:i386
+
+    sudo apt-get install texinfo
+    ```
+
+> **Note**: Depending on your system, additional packages may be required.
+
+### 4. Install PetaLinux
+- **Important**: The PetaLinux installer will extract its files into the **current directory** without creating subdirectories. Make sure you are in the desired target directory before running the installer.
+
+To install PetaLinux, run the following commands:
+
+```bash
+chmod +x petalinux-v2022.1-04191534-installer.run
+./petalinux-v2022.1-04191534-installer.run
+```
+### 4. Configure PetaLinux
+
+- To configure, build, and flash PetaLinux, you must first source the PetaLinux environment setup script:
+
+    ```bash
+    source /opt/Xilinx/Petalinux/settings.sh
+    ```
+
+- Navigate to the directory where you want to create your project and run the following commands:
+
+    ```bash
+    cd projectfolder
+    source /opt/Xilinx/Petalinux/settings.sh
+
+    # For Ultrascale+ devices, use 'zynqMP', and for Zynq-7000, use 'zynq'
+    petalinux-create --type project --template zynqMP --name projectName
+    cd projectfolder
+    ```
+
+---
+
+### 5. Import Hardware Description and Customize the Build
+
+- Import your exported hardware description file (refer to the other repository for details):
+
+    ```bash
+    petalinux-config --get-hw-description zcu_102_sgmii_sfp.xsa
+    ```
+
+- Now, you can customize your PetaLinux build. For instance, to select the `axi_eth` network interface, navigate through the configuration menu:
+
+    ```text
+    Subsystem AUTO Hardware Settings -> Ethernet Settings -> Primary Ethernet -> axi_eth
+    ```
+
+    ![AXI_ETH](documentation/figures/screenshot_axi_eth.png)
+
+- To adjust the root filesystem settings, navigate to:
+
+    ```text
+    Image Packaging Configuration -> Root Filesystem -> Select Type (EXT4 (SD/eMMC/SATA/USB))
+    ```
+
+    - For the device node, select `/dev/mmcblk0p2`, which represents the second partition on the SD card. (You may need to insert the SD card and manually create the two partitions, as detailed in Step 10.) With this selection all the data created within the petalinux instance is stored on the second SD-card partition.
+
+- If you do **not** wish to use a TFTP server, disable the option to *"Copy final images to tftpboot directory"* by pressing `n`.
 
 
+![ROOT_FS](documentation/figures/root_fs_selection.png)
 
-## Getting started
+Finally press Save and Exit.
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+### 6. Configure U-Boot for SD Card Support
 
-## Add your files
+- To configure U-Boot, run the following command:
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+    ```bash
+    petalinux-config -c u-boot
+    ```
+
+- Enable SD Card support by navigating through the menu:
+
+    ```text
+    Boot Options -> Media -> SD Support for booting from SD/EMMC
+    ```
+
+![ROOT_FS](documentation/figures/sd_card_support.png)
+
+- Press `y` to enable SD Card support.
+
+
+### 7. Add a Custom Application
+
+You can add a custom application to your PetaLinux project by creating a new one with the following command:
+
+```bash
+$ petalinux-create -t apps --template c++ --name myapp --enable
+```
+This command creates an application named *myapp.* Apps must be in lowercase letters otherwise the warning: 
 
 ```
-cd existing_repo
-git remote add origin https://git.fim.uni-passau.de/frankfl/zcu_102_petalinux_setup.git
-git branch -M main
-git push -uf origin main
+WARNING: QA Issue: PN: embeddedRTPS is upper case, this can result in unexpected behavior. [uppercase-pn]
 ```
 
-## Integrate with your tools
+pops up. 
 
-- [ ] [Set up project integrations](https://git.fim.uni-passau.de/frankfl/zcu_102_petalinux_setup/-/settings/integrations)
+The relevant files will be located in the following directory:
 
-## Collaborate with your team
+```bash
+./project-spec/meta-user/recipes-apps/myapp
+```
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+Within the `myapp.bb` file (the recipe file for the application), you can specify various settings for your app. Below is an example of the contents:
+```c++
+#
+# This file is the myapp recipe.
+#
 
-## Test and Deploy
+SUMMARY = "Simple emyapp application"
+SECTION = "PETALINUX/apps"
+LICENSE = "MIT"
+LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302"
 
-Use the built-in continuous integration in GitLab.
+SRC_URI = "file://myapp.cpp \
+           file://Makefile \
+		  "
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+S = "${WORKDIR}"
 
-***
+do_compile() {
+	     oe_runmake
+}
 
-# Editing this README
+do_install() {
+	     install -d ${D}${bindir}
+	     install -m 0755 myapp ${D}${bindir}
+}
+```
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+In the files directory, you will find `myapp.cpp` and a `Makefile` that you can modify to configure your application.
 
-## Suggestions for a good README
+### 7 . Configure the kernel
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+By executing the following command, the linux kernel can be configured:
 
-## Name
-Choose a self-explaining name for your project.
+```bash
+$ petalinux-config -c kernel
+```
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+For now we do not change anything here and just keep the default values. Anyway it is worth to scroll through the menues. 
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+### 6. Configure Root Filesystem (RootFS)
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+To configure the root filesystem, run the following command:
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+```bash
+$ petalinux-config -c rootfs
+```
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+To add our previously created application go to:
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+```bash
+Under apps -> myapp 
+```
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+Here, you can select the previously created `myapp` application, which will then be automatically compiled and included in the build image.
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+![rootfs_myapp](documentation/figures/select_myapp_rootfs.png)
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+Additionally, you can select other packages under PetaLinux Package Groups, such as support for X11, Qt, or Python.
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+### 7. Build PetaLinux
 
-## License
-For open source projects, say how it is licensed.
+No as we have configured all settings, you can build Petalinux by executing
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+```bash
+$ petalinux-build
+
+[INFO] Sourcing buildtools
+[INFO] Building project
+[INFO] Sourcing build environment
+[INFO] Generating workspace directory
+INFO: bitbake petalinux-image-minimal
+NOTE: Started PRServer with DBfile: /home/florianfrank/Documents/asoa_package_filtering_root/zcu_102_petalinux_setup/zynq_netboot/build/cache/prserv.sqlite3, Address: 127.0.0.1:43887, PID: 275754
+WARNING: Host distribution "ubuntu-22.04" has not been validated with this version of the build system; you may possibly experience unexpected failures. It is recommended that you use a tested distribution.
+Loading cache: 100% |##############################################################################################################################################################| Time: 0:00:00
+Loaded 5391 entries from dependency cache.
+Parsing recipes: 100% |############################################################################################################################################################| Time: 0:00:00
+Parsing of 3594 .bb files complete (3589 cached, 5 parsed). 5396 targets, 509 skipped, 0 masked, 0 errors.
+NOTE: Resolving any missing task queue dependencies
+#########################################################################################################################################################| Time: 0:00:06
+INFO: Successfully copied built images to tftp dir: /var/lib/tftpboot
+[INFO] Successfully built project
+```
+
+You should see the following output. In this example, the TFTP boot option was enabled, which automatically copies the build artifacts to `/var/lib/tftpboot`.
+
+Additionally, a directory `/images/linux/` should now be present, containing all the necessary build files.
+
+### 9. Create a bootable package
+
+In a next step all files to boot the system must be created. To do this the following command must be executed: 
+
+```bash
+$ petalinux-package --boot --u-boot images/linux/u-boot.elf --dtb images/linux/system.dtb --fsbl images/linux zynqmp_fsbl.elf --fpga images/linux/system.bit
+```
+
+This command creates a `BOOT.BIN`it will fail if you rebuild the system and a BOOT.BIN is already available. 
+Therefore you can simply excute the script: 
+
+```bash
+$ ../build_boot.sh
+```
+
+In your default project folder. It will remove the previous `BOOT.bin` and create a new one.
+
+
+
+### 8. Booting the device
+
+There are several options for booting your device. We will cover three methods: 
+
+1. Using JTAG and the hardware server.
+2. Booting from an SD card.
+3. Booting via TFTP with NFS as the root filesystem.
+
+#### 8.1 Boot Petalinux via JTAG 
+
+When booting the device via JTAG, ensure you are in the current project folder.
+
+First, verify that Vivado is not running with an active connection to the hardware server. If Vivado is open and connected, navigate to the **Hardware Manager** and disconnect the device.
+
+![alt text](documentation/figures/hw_server_close.png)
+
+Afterwards start your hardware server by executing
+
+```bash
+$ /opt/Xilinx/Petalinux/tools/xsct/bin/hw_server
+```
+
+Do this in a seperate tab because the application blocks the terminal. 
+
+Afterwards set the ZCU102 in JTAG mode by setting the Pins SW6 to 0000. 
+
+![alt text](documentation/figures/switch_JTAG.png)
+
+
+Afterwards return to the project folder and execute: 
+
+```bash
+$ petalinux-boot --jtag --kernel --hw_server-url TCP:127.0.0.1:3121
+```
+
+### Prepare SD Card image
+
+
+```bash 
+
+
+```
+
+
+
+1. Image packageing in petalinux-config
+
+
+
+1. Go to vitis
+-> new application -> select hardware export
+-> select r5 and next r5_0
+-> Select OpenAMP echo test
+
+
+
+
+
+
+petalinux-package --boot --fsbl images/linux/zynqmp_fsbl.elf --fpga images/linux/system.bit  --u-boot
