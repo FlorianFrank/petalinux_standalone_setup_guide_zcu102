@@ -263,37 +263,162 @@ Do this in a seperate tab because the application blocks the terminal.
 
 Afterwards set the ZCU102 in JTAG mode by setting the Pins SW6 to 0000. 
 
-![alt text](documentation/figures/switch_JTAG.png)
+![alt text](documentation/figures/switch_jtag.jpeg)
 
 
-Afterwards return to the project folder and execute: 
+Afterwards connect the UART and JTAG pin by by a micro USB cable to your PC. 
+You should see multipe UART ports. In our case /dev/ttyUSB0 to /dev/ttyUSB3.
+
+![alt text](documentation/figures/uart_jtag_connection.jpeg)
+
+Connect with a tool of your choice to /dev/ttyUSB0 with following parameters: 
+
+- Baudrate: 115200
+- Stopbits: 1
+- Bitwidth: 8 Bit.
+- Parity: None
+
+We used putty configured as follows and pressed connect. 
+
+![alt text](documentation/figures/putty.png)
+
+
+
+Afterwards return to the project folder and execute the following command in your project folder:
 
 ```bash
-$ petalinux-boot --jtag --kernel --hw_server-url TCP:127.0.0.1:3121
+$ petalinux-boot --jtag --fpga --kernel --hw_server-url TCP:127.0.0.1:3121
+
+[INFO] Sourcing buildtools
+INFO: Use bitstream: "/home/florianfrank/Documents/asoa_package_filtering_root/zcu_102_petalinux_setup/zynq_netboot/images/linux/system.bit.
+INFO: Please use --fpga --bitstream <BITSTREAM> to specify a bitstream if you want to use other bitstream.
+INFO: Launching XSDB for file download and boot.
+INFO: This may take a few minutes, depending on the size of your image.
+rlwrap: warning: your $TERM is 'xterm-256color' but rlwrap couldn't find it in the terminfo database. Expect some problems.: Inappropriate ioctl for device
+INFO: Configuring the FPGA...                                                                                                                                                                                                                 
+INFO: Downloading bitstream: /home/florianfrank/Documents/asoa_package_filtering_root/zcu_102_petalinux_setup/zynq_netboot/images/linux/system.bit to the target.
+INFO: Downloading ELF file: /home/florianfrank/Documents/asoa_package_filtering_root/zcu_102_petalinux_setup/zynq_netboot/images/linux/pmufw.elf to the target.                                                                               
+INFO: Downloading ELF file: /home/florianfrank/Documents/asoa_package_filtering_root/zcu_102_petalinux_setup/zynq_netboot/images/linux/zynqmp_fsbl.elf to the target.                                                                         
+INFO: Loading image: /home/florianfrank/Documents/asoa_package_filtering_root/zcu_102_petalinux_setup/zynq_netboot/images/linux/system.dtb at 0x00100000                                                                                      
+INFO: Downloading ELF file: /home/florianfrank/Documents/asoa_package_filtering_root/zcu_102_petalinux_setup/zynq_netboot/images/linux/u-boot.elf to the target.                                                                              
+INFO: Loading image: /home/florianfrank/Documents/asoa_package_filtering_root/zcu_102_petalinux_setup/zynq_netboot/images/linux/Image at 0x00200000                                                                                           
+INFO: Loading image: /home/florianfrank/Documents/asoa_package_filtering_root/zcu_102_petalinux_setup/zynq_netboot/images/linux/boot.scr at 0x20000000                                                                                        
+INFO: Downloading ELF file: /home/florianfrank/Documents/asoa_package_filtering_root/zcu_102_petalinux_setup/zynq_netboot/images/linux/bl31.elf to the target.
+INFO: Enter booti 0x00200000 - 0x00100000 in uboot terminal if auto boot fails       
 ```
 
-### Prepare SD Card image
+This will take a while. Afterwards you can see output on the putty console. 
 
 
-```bash 
+![alt text](documentation/figures/jtag_boot_console.png)
 
+Note that the root file system must be selected to `INTRMFS` when ext (eMMC) is selected a SD card must be preseent. 
+If the SD card is present as explained in the next step, the following command starts the operating system
 
 ```
+zynq> boot
+```
+
+When the kernel is bootet the console should look the following: 
+
+When you log in for the first time use the username *petalinux*, you will directly need to change the password. 
+
+![alt text](documentation/figures/kernel_boot.png)
 
 
+####  8.1 Booting Petalinux via SD Card
 
-1. Image packageing in petalinux-config
+##### 8.1.1 Partition the SD-Card
+
+You need a SD card with at least 8 GB of Space. 
+
+Partition your SD card the following: 
+- **Partition 1**: 
+    - Size: 1 GB
+    - Format FAT
+    - name: BOOT
+- **Partition 2**: 
+    - Size: at least 7 GB
+    - Format: ext4
+    - name rootfs
+
+You can use the Ubuntu Disk Utility to do that: 
+
+![alt text](documentation/figures/FAT_partition.png)
+![alt text](documentation/figures/ext4_partition.png)
 
 
+Afterwards please check the name of the device file for the second partition, as marked with a red rectangle: 
 
-1. Go to vitis
--> new application -> select hardware export
--> select r5 and next r5_0
--> Select OpenAMP echo test
+![alt text](documentation/figures/partition.jpeg)
+
+##### 8.1.1 Copy files to the SD-Card
+
+The following files from `image/linux` must be copied to the BOOT partition: 
+
+- **BOOT.BIN:** Boot image contains following crucial components: 
+    - **First Stage Bootloader (FSBL):** Initializes Hardware components such as memory, clock configuration peripherals and loads the next stage in the boot process (in our case the u-boot bootloader).
+    - **Bitstream:** Contains the previous selected bitstream flashing the design on the PL. (In our case, if you see the lEDs next to SW13 blinking, the bitstream was sucessfully flashed to the device.)
+    - **U-Boot:** Secondary bootloader whcih is loading the linux kernel, device tree and root file system
+
+- **boot.scr:** Contains the boot commands writen to the u-boot bootloader. You can open the file with your text editor and have a look there and will find a specification of the used files, as well as the boot order and boot targets, such as mmc0 and mmc1 for the SD-Card, jtag, or QSPI
+
+    ```
+    fitimage_name=image.ub
+    kernel_name=Image
+    ramdisk_name=ramdisk.cpio.gz.u-boot
+    rootfs_name=rootfs.cpio.gz.u-boot
 
 
+    for boot_target in ${boot_targets};
+    do
+        echo "Trying to load boot images from ${boot_target}"
+        if test "${boot_target}" = "jtag" ; then
+            booti 0x00200000 0x04000000 0x00100000
+        fi
+        if test "${boot_target}" = "mmc0" || test "${boot_target}" = "mmc1" || test "${boot_target}" = "usb0" || test "${boot_target}" = "usb1"; then
+            if test -e ${devtype} ${devnum}:${distro_bootpart} /uEnv.txt; then
+                fatload ${devtype} ${devnum}:${distro_bootpart} 0x00200000 uEnv.txt;
+                echo "Importing environment(uEnv.txt) from ${boot_target}..."
+                env import -t 0x00200000 $filesize
+                if test -n $uenvcmd; then
+                    echo "Running uenvcmd ...";
+                    run uenvcmd;
+                fi
+            fi
+        ....
+    ```
 
+- **image.ub:** Flattened Image Tree File it packages multiple boot components (kernel, device tree, etc. )
+    - Contains following components: 
+        - The Linux kernel
+        - Device Tree Blob: Binary description of the hardware like processors and peripherals required fo rthe kernel to understand the specific board configuration
+        - Initramfs (optional): temporary root file system loaded into the memory and used for kernel during boot before actual root filesystem is mounted. 
 
+To copy these files you can use a simple cp command or you can execute our script: 
 
+```bash
+$ ./create_sd_card.sh
+```
 
-petalinux-package --boot --fsbl images/linux/zynqmp_fsbl.elf --fpga images/linux/system.bit  --u-boot
+This script will also create the root file system, which can either be unpacked on the rootfs partition of the SD-card by copying rootfs.tar.gz and unzipping it: 
+
+```bash
+$ tar xvzf rootfs.tar.gz
+```
+
+Or as part of the create_sd_card script, you can use the dd command to create a image: 
+
+```bash
+sudo dd if=images/linux/rootfs.ext4 of=/dev/mmcblk0p2 status=progress
+```
+
+Therefore make sure the device file `/dev/mmcblk0p2` matches with the device file of the second SD-Card partition.
+
+##### 8.1.2 Boot from the SD card 
+
+To do this, first put SW6 in boot mode by selecting 0111 as showin in the following figure: 
+
+![alt text](documentation/figures/boot_sd_card_switch.jpeg)
+ 
+ Afterwards insert the SD card, power on the board by switching SW1 and you can continue interacting via the UART console, as described in Section 8.1. 
