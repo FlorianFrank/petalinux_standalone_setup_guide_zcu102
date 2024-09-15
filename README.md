@@ -342,25 +342,24 @@ When logging in for the first time, use the username `petalinux`. You will be pr
 
 ##### 8.1.1 Partition the SD-Card
 
-You need a SD card with at least 8 GB of Space. 
+To boot PetaLinux from an SD card, you need a card with at least 8 GB of space. Follow these steps to partition the SD card:
 
-Partition your SD card the following: 
-- **Partition 1**: 
-    - Size: 1 GB
-    - Format FAT
-    - name: BOOT
-- **Partition 2**: 
-    - Size: at least 7 GB
-    - Format: ext4
-    - name rootfs
+- **Partition 1**:
+  - **Size**: 1 GB
+  - **Format**: FAT
+  - **Name**: BOOT
 
-You can use the Ubuntu Disk Utility to do that: 
+- **Partition 2**:
+  - **Size**: At least 7 GB
+  - **Format**: ext4
+  - **Name**: rootfs
 
-![alt text](documentation/figures/FAT_partition.png)
-![alt text](documentation/figures/ext4_partition.png)
+You can use the Ubuntu Disk Utility to create these partitions:
+
+![alt text](documentation/figures/paritioning_merged.png)
 
 
-Afterwards please check the name of the device file for the second partition, as marked with a red rectangle: 
+After partitioning, check the name of the device file for the second partition. Look for the name marked with a red rectangle:
 
 ![alt text](documentation/figures/partition.jpeg)
 
@@ -407,7 +406,7 @@ The following files from `image/linux` must be copied to the BOOT partition:
         - Device Tree Blob: Binary description of the hardware like processors and peripherals required fo rthe kernel to understand the specific board configuration
         - Initramfs (optional): temporary root file system loaded into the memory and used for kernel during boot before actual root filesystem is mounted. 
 
-To copy these files you can use a simple cp command or you can execute our script: 
+To copy these files, you can either use the `cp` command manually or execute our provided script:
 
 ```bash
 $ ./create_sd_card.sh
@@ -425,12 +424,20 @@ Or as part of the create_sd_card script, you can use the dd command to create a 
 sudo dd if=images/linux/rootfs.ext4 of=/dev/mmcblk0p2 status=progress
 ```
 
-Therefore make sure the device file `/dev/mmcblk0p2` matches with the device file of the second SD-Card partition.
+>**Important**: Ensure that the device file `/dev/mmcblk0p2` corresponds to the second partition of your SD card.
+
 
 ##### 8.1.2 Boot from the SD card 
 
-To do this, first put SW6 in boot mode by selecting 0111 as showin in the following figure: 
+To boot from the SD card, follow these steps:
 
-![alt text](documentation/figures/boot_sd_card_switch.jpeg)
- 
- Afterwards insert the SD card, power on the board by switching SW1 and you can continue interacting via the UART console, as described in Section 8.1. 
+1. **Set SW6 to Boot Mode**: Configure SW6 to the `0111` position, as shown in the figure below:
+
+    ![SW6 Boot Mode](documentation/figures/boot_sd_card_switch.jpeg)
+
+2. **Insert the SD Card**: Place the prepared SD card into the SD card slot.
+
+3. **Power On the Board**: Switch on the board by toggling SW1.
+
+4. **Interact via UART Console**: Continue with the setup using the UART console, as described in Section 8.1.
+
