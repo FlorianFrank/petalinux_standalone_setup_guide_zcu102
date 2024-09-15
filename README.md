@@ -60,7 +60,7 @@ chmod +x petalinux-v2022.1-04191534-installer.run
 
 ### 5. Import Hardware Description and Customize the Build
 
-- Import your exported hardware description file (refer to the other repository for details):
+- Import your exported hardware description file (refer to the following [repository](https://fimgit.fim.uni-passau.de/frankfl/zcu_102_gmii_sfp) for details):
 
     ```bash
     petalinux-config --get-hw-description zcu_102_sgmii_sfp.xsa
@@ -80,14 +80,14 @@ chmod +x petalinux-v2022.1-04191534-installer.run
     Image Packaging Configuration -> Root Filesystem -> Select Type (EXT4 (SD/eMMC/SATA/USB))
     ```
 
-    - For the device node, select `/dev/mmcblk0p2`, which represents the second partition on the SD card. (You may need to insert the SD card and manually create the two partitions, as detailed in Step 10.) With this selection all the data created within the petalinux instance is stored on the second SD-card partition.
+    - For the device node, select `/dev/mmcblk0p2`, which represents the second partition on the SD card. (You may need to insert the SD card and manually create the two partitions, as detailed in Step 8.1) With this selection all the data created within the petalinux instance is stored on the second SD-card partition.
 
 - If you do **not** wish to use a TFTP server, disable the option to *"Copy final images to tftpboot directory"* by pressing `n`.
 
 
 ![ROOT_FS](documentation/figures/root_fs_selection.png)
 
-Finally press Save and Exit.
+Finally save the configiguration and exit the menu.
 
 
 ### 6. Configure U-Boot for SD Card Support
@@ -111,26 +111,26 @@ Finally press Save and Exit.
 
 ### 7. Add a Custom Application
 
-You can add a custom application to your PetaLinux project by creating a new one with the following command:
+To add a custom application to your PetaLinux project, use the following command:
 
 ```bash
 $ petalinux-create -t apps --template c++ --name myapp --enable
 ```
-This command creates an application named *myapp.* Apps must be in lowercase letters otherwise the warning: 
+
+This command creates an application named `myapp`. Ensure the application name is in lowercase to avoid potential warnings like:
 
 ```
 WARNING: QA Issue: PN: embeddedRTPS is upper case, this can result in unexpected behavior. [uppercase-pn]
 ```
 
-pops up. 
-
-The relevant files will be located in the following directory:
+The generated files for your application will be located in:
 
 ```bash
 ./project-spec/meta-user/recipes-apps/myapp
 ```
 
-Within the `myapp.bb` file (the recipe file for the application), you can specify various settings for your app. Below is an example of the contents:
+Within the `myapp.bb` file (the BitBake recipe for your application), you can configure various build settings. Below is an example of the contents:
+
 ```c++
 #
 # This file is the myapp recipe.
@@ -161,14 +161,13 @@ In the files directory, you will find `myapp.cpp` and a `Makefile` that you can 
 
 ### 7 . Configure the kernel
 
-By executing the following command, the linux kernel can be configured:
+To configure the Linux kernel in your PetaLinux project, use the following command:
 
 ```bash
 $ petalinux-config -c kernel
 ```
 
-For now we do not change anything here and just keep the default values. Anyway it is worth to scroll through the menues. 
-
+This command opens the kernel configuration menu. For now, we will leave all settings at their default values. However, it's worth taking the time to explore the various menus to familiarize yourself with the available options.
 
 ### 6. Configure Root Filesystem (RootFS)
 
@@ -178,13 +177,14 @@ To configure the root filesystem, run the following command:
 $ petalinux-config -c rootfs
 ```
 
-To add our previously created application go to:
+To include the custom application created earlier (e.g., `myapp`), navigate to:
+
 
 ```bash
 Under apps -> myapp 
 ```
 
-Here, you can select the previously created `myapp` application, which will then be automatically compiled and included in the build image.
+Select `myapp` to ensure it is automatically compiled and included in the build image.
 
 ![rootfs_myapp](documentation/figures/select_myapp_rootfs.png)
 
@@ -192,7 +192,8 @@ Additionally, you can select other packages under PetaLinux Package Groups, such
 
 ### 7. Build PetaLinux
 
-No as we have configured all settings, you can build Petalinux by executing
+Now that all settings have been configured, you can build the PetaLinux project by running the following command:
+
 
 ```bash
 $ petalinux-build
@@ -216,69 +217,78 @@ INFO: Successfully copied built images to tftp dir: /var/lib/tftpboot
 
 You should see the following output. In this example, the TFTP boot option was enabled, which automatically copies the build artifacts to `/var/lib/tftpboot`.
 
-Additionally, a directory `/images/linux/` should now be present, containing all the necessary build files.
+Additionally, a new directory named `/images/linux/` will be created, containing all the necessary build files for your project.
 
 ### 9. Create a bootable package
 
-In a next step all files to boot the system must be created. To do this the following command must be executed: 
+To generate all the necessary files for booting the system, run the following command:
 
 ```bash
 $ petalinux-package --boot --u-boot images/linux/u-boot.elf --dtb images/linux/system.dtb --fsbl images/linux zynqmp_fsbl.elf --fpga images/linux/system.bit
 ```
 
-This command creates a `BOOT.BIN`it will fail if you rebuild the system and a BOOT.BIN is already available. 
-Therefore you can simply excute the script: 
+This command creates the `BOOT.BIN` file. However, if a `BOOT.BIN` already exists (for example, after rebuilding the system), the command will fail.
+
+To handle this, you can run the following script from your default project folder to automatically remove the previous BOOT.BIN and generate a new one:
 
 ```bash
 $ ../build_boot.sh
 ```
 
-In your default project folder. It will remove the previous `BOOT.bin` and create a new one.
-
-
+This script ensures that any old `BOOT.BIN` is deleted before creating a new one, preventing build errors.
 
 ### 8. Booting the device
 
-There are several options for booting your device. We will cover three methods: 
+# Booting the Device
 
-1. Using JTAG and the hardware server.
-2. Booting from an SD card.
-3. Booting via TFTP with NFS as the root filesystem.
+There are several methods to boot your device. Below, we outline three common approaches:
+
+1. **Booting with JTAG and the Hardware Server**  
+   This method uses JTAG and the hardware server to load and run the system directly from your host machine.
+
+2. **Booting from an SD Card**  
+   You can boot your system by creating a bootable SD card containing the required files, such as `BOOT.BIN` and the root filesystem.
+
+3. **Booting via TFTP with NFS as the Root Filesystem**  
+   This method involves using TFTP to load the kernel and using NFS to mount the root filesystem over the network.
+
+Each method offers different advantages depending on your setup and requirements.
 
 #### 8.1 Boot Petalinux via JTAG 
 
-When booting the device via JTAG, ensure you are in the current project folder.
+To boot your device via JTAG, follow these steps. Make sure you are in your current project folder.
 
-First, verify that Vivado is not running with an active connection to the hardware server. If Vivado is open and connected, navigate to the **Hardware Manager** and disconnect the device.
+Before proceeding, ensure that **Vivado** is not running an active connection to the hardware server. If Vivado is open and connected, go to the **Hardware Manager** and disconnect the device.
 
 ![alt text](documentation/figures/hw_server_close.png)
 
-Afterwards start your hardware server by executing
+Afterwards, launch the hardware server by running the following command:
 
 ```bash
 $ /opt/Xilinx/Petalinux/tools/xsct/bin/hw_server
 ```
 
-Do this in a seperate tab because the application blocks the terminal. 
+> **Note**: Run this command in a separate terminal tab because the hardware server process blocks the terminal.
 
-Afterwards set the ZCU102 in JTAG mode by setting the Pins SW6 to 0000. 
+To configure the ZCU102 for JTAG boot, set the **SW6** pins to `0000`, as shown in the following figure.
+
 
 ![alt text](documentation/figures/switch_jtag.jpeg)
 
+After setting the device to JTAG mode, connect **UART** and **JTAG** to your PC using a micro USB cable. You should see multiple UART ports, typically `/dev/ttyUSB0` through `/dev/ttyUSB3`.
 
-Afterwards connect the UART and JTAG pin by by a micro USB cable to your PC. 
-You should see multipe UART ports. In our case /dev/ttyUSB0 to /dev/ttyUSB3.
 
 ![alt text](documentation/figures/uart_jtag_connection.jpeg)
 
-Connect with a tool of your choice to /dev/ttyUSB0 with following parameters: 
+Use a terminal tool of your choice to connect to `/dev/ttyUSB0` with the following configuration:
 
-- Baudrate: 115200
-- Stopbits: 1
-- Bitwidth: 8 Bit.
-- Parity: None
+- **Baudrate**: 115200
+- **Stopbits**: 1
+- **Data Bits**: 8 bits
+- **Parity**: None
 
-We used putty configured as follows and pressed connect. 
+In this example, we used **PuTTY**, configured as shown below, and pressed "Connect":
+
 
 ![alt text](documentation/figures/putty.png)
 
@@ -307,23 +317,25 @@ INFO: Downloading ELF file: /home/florianfrank/Documents/asoa_package_filtering_
 INFO: Enter booti 0x00200000 - 0x00100000 in uboot terminal if auto boot fails       
 ```
 
-This will take a while. Afterwards you can see output on the putty console. 
+This process may take some time. Once completed, you should see output in the PuTTY console.
+
 
 
 ![alt text](documentation/figures/jtag_boot_console.png)
 
-Note that the root file system must be selected to `INTRMFS` when ext (eMMC) is selected a SD card must be preseent. 
-If the SD card is present as explained in the next step, the following command starts the operating system
+Ensure that the root filesystem is set to `INTRMFS`. If you select `ext (eMMC)`, an SD card must be present. As explained in the next step, if the SD card is correctly inserted, you can start the operating system with the following command:
 
 ```
 zynq> boot
 ```
 
-When the kernel is bootet the console should look the following: 
+Once the kernel has booted, the console output should look like this:
 
-When you log in for the first time use the username *petalinux*, you will directly need to change the password. 
 
 ![alt text](documentation/figures/kernel_boot.png)
+
+
+When logging in for the first time, use the username `petalinux`. You will be prompted to change the password immediately.
 
 
 ####  8.1 Booting Petalinux via SD Card
