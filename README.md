@@ -63,8 +63,9 @@ chmod +x petalinux-v2022.1-04191534-installer.run
 - Import your exported hardware description file (refer to the following [repository](https://fimgit.fim.uni-passau.de/frankfl/zcu_102_gmii_sfp) for details):
 
     ```bash
-    petalinux-config --get-hw-description zcu_102_sgmii_sfp.xsa
+    petalinux-config --get-hw-description ../hardware/zcu_102_sgmii_sfp.xsa
     ```
+  
 
 - Now, you can customize your PetaLinux build. For instance, to select the `axi_eth` network interface, navigate through the configuration menu:
 
@@ -90,7 +91,7 @@ chmod +x petalinux-v2022.1-04191534-installer.run
 Finally save the configiguration and exit the menu.
 
 
-### 6. Configure U-Boot for SD Card Support
+### 6. Configure U-Boot
 
 - To configure U-Boot, run the following command:
 
@@ -107,6 +108,335 @@ Finally save the configiguration and exit the menu.
 ![ROOT_FS](documentation/figures/sd_card_support.png)
 
 - Press `y` to enable SD Card support.
+
+#### 6.1 Configure u-boot device tree
+
+Furthermore the u-boot tree can be further customized within the file ` project-spec/meta-user/recipes-bsp/u-boot/files/platform-top.h`
+
+TODO nochmals checken!
+
+```c++
+#define CONFIG_EXTRA_ENV_SETTINGS \
+"autoload=no\0" \
+"netstart=0x10000000\0"\
+"kernelsize=0x2000000\0" \ 
+"kernelstart=0x740000\0" \ 
+"kernelstart_0=0x740000\0" \ 
+"ipaddr=192.168.1.10\0" \
+"default_bootcmd=run sdboot\0" \
+""
+```
+
+autoload=no disables the TFTP network boot option on startup.
+
+
+```shell
+/include/ "system-conf.dtsi"
+/ {
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+		rpu0vdev0vring0: rpu0vdev0vring0@3ed40000 {
+			no-map;
+			reg = <0x0 0x3ed40000 0x0 0x4000>;
+		};
+		rpu0vdev0vring1: rpu0vdev0vring1@3ed44000 {
+			no-map;
+			reg = <0x0 0x3ed44000 0x0 0x4000>;
+		};
+		rpu0vdev0buffer: rpu0vdev0buffer@3ed48000 {
+			no-map;
+			reg = <0x0 0x3ed48000 0x0 0x100000>;
+		};
+		rproc_0_reserved: rproc@3ed00000 {
+			no-map;
+			reg = <0x0 0x3ed00000 0x0 0x40000>;
+		};
+	};
+
+
+	tcm_0a@ffe00000 {
+		no-map;
+		reg = <0x0 0xffe00000 0x0 0x10000>;
+		phandle = <0x40>;
+		status = "okay";
+		compatible = "mmio-sram";
+		power-domain = <&zynqmp_firmware 15>;
+	};
+
+	tcm_0b@ffe20000 {
+		no-map;
+		reg = <0x0 0xffe20000 0x0 0x10000>;
+		phandle = <0x41>;
+		status = "okay";
+		compatible = "mmio-sram";
+		power-domain = <&zynqmp_firmware 16>;
+	};
+
+
+	rf5ss@ff9a0000 {
+		compatible = "xlnx,zynqmp-r5-remoteproc";
+		xlnx,cluster-mode = <1>;
+		ranges;
+		reg = <0x0 0xFF9A0000 0x0 0x10000>;
+		#address-cells = <0x2>;
+		#size-cells = <0x2>;
+
+		r5f_0 {
+			compatible = "xilinx,r5f";
+			#address-cells = <2>;
+			#size-cells = <2>;
+			ranges;
+			sram = <0x40 0x41>;
+			memory-region = <&rproc_0_reserved>, <&rpu0vdev0buffer>, <&rpu0vdev0vring0>, <&rpu0vdev0vring1>;
+			power-domain = <&zynqmp_firmware 7>;
+			mboxes = <&ipi_mailbox_rpu0 0>, <&ipi_mailbox_rpu0 1>;
+			mbox-names = "tx", "rx";
+		};
+	};
+
+	zynqmp_ipi1 {
+		compatible = "xlnx,zynqmp-ipi-mailbox";
+		interrupt-parent = <&gic>;
+		interrupts = <0 29 4>;
+		xlnx,ipi-id = <7>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		/* APU<->RPU0 IPI mailbox controller */
+		ipi_mailbox_rpu0: mailbox@ff990600 {
+			reg = <0xff990600 0x20>,
+			      <0xff990620 0x20>,
+			      <0xff9900c0 0x20>,
+			      <0xff9900e0 0x20>;
+			reg-names = "local_request_region",
+				    "local_response_region",
+				    "remote_request_region",
+				    "remote_response_region";
+			#mbox-cells = <1>;
+			xlnx,ipi-id = <1>;
+		};
+	};
+};
+```
+
+The `system-user.dtsi` file defines memory regions and their roles in the system for the ZCU102 Evaluation Board. 
+
+##### 6.1.1 Memory configuration (reserved-memory)
+
+This configuration ensures that specific memory regions are reserved for hardware subsystems, preventing conflicts with regular system memory.
+
+```
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+		rpu0vdev0vring0: rpu0vdev0vring0@3ed40000 {
+			no-map;
+			reg = <0x0 0x3ed40000 0x0 0x4000>;
+		};
+		rpu0vdev0vring1: rpu0vdev0vring1@3ed44000 {
+			no-map;
+			reg = <0x0 0x3ed44000 0x0 0x4000>;
+		};
+		rpu0vdev0buffer: rpu0vdev0buffer@3ed48000 {
+			no-map;
+			reg = <0x0 0x3ed48000 0x0 0x100000>;
+		};
+		rproc_0_reserved: rproc@3ed00000 {
+			no-map;
+			reg = <0x0 0x3ed00000 0x0 0x40000>;
+		};
+	};
+  ```
+
+- **rpu0vdev0vring0** & **rpu0vdev0vring1**:
+  - **Size**: 16 kB each
+  - **Purpose**: These regions are used for virtual ring buffers, facilitating communication between the Application Processing Unit (APU) and the Real-time Processing Unit (RPU).
+
+- **rpu0vdev0buffer**:
+  - **Size**: 1 MB
+  - **Purpose**: This region holds data exchanged between the cores (APU and RPU) through interprocessor communication (IPC).
+
+- **rproc_0_reserved**:
+  - **Size**: 256 kB
+  - **Purpose**: Reserved for the RPU's remote processor operations, storing essential code or data needed during runtime execution.
+
+
+##### 6.1.2 TCM (Tightly Coupled Memory) Configuration
+
+**tcm_0a and tcm_0b:** These blocks define memory regions (0xffe00000 and 0xffe20000, each 64 KB) for tightly coupled memory used by the RPU cores. TCM is fast, low-latency memory for high-performance real-time tasks. The compatible = "mmio-sram" property indicates these are memory-mapped SRAM regions.
+
+```
+	tcm_0a@ffe00000 {
+		no-map;
+		reg = <0x0 0xffe00000 0x0 0x10000>;
+		phandle = <0x40>;
+		status = "okay";
+		compatible = "mmio-sram";
+		power-domain = <&zynqmp_firmware 15>;
+	};
+
+	tcm_0b@ffe20000 {
+		no-map;
+		reg = <0x0 0xffe20000 0x0 0x10000>;
+		phandle = <0x41>;
+		status = "okay";
+		compatible = "mmio-sram";
+		power-domain = <&zynqmp_firmware 16>;
+	};
+```
+
+##### 6.1.3 R5 (RPU) Remote Processor (rf5ss@ff9a0000)
+
+- **r5f_0:** The RPU core is marked as compatible with the xilinx,r5f processor and is associated with multiple memory regions for operation, including the reserved memory, VirtIO buffers, and virtual ring buffers defined earlier.
+- The power-domain and mailbox properties manage power control and communication via the IPI mechanism with the APU.
+
+```shell
+		r5f_0 {
+			compatible = "xilinx,r5f";
+			#address-cells = <2>;
+			#size-cells = <2>;
+			ranges;
+			sram = <0x40 0x41>;
+			memory-region = <&rproc_0_reserved>, <&rpu0vdev0buffer>, <&rpu0vdev0vring0>, <&rpu0vdev0vring1>;
+			power-domain = <&zynqmp_firmware 7>;
+			mboxes = <&ipi_mailbox_rpu0 0>, <&ipi_mailbox_rpu0 1>;
+			mbox-names = "tx", "rx";
+		};
+	};
+```
+
+##### 6.1.4  IPI Mailbox (zynqmp_ipi1)
+
+This section defines the Inter-Processor Interrupt (IPI) mechanism, which facilitates communication between the APU and RPU cores:
+
+```
+	zynqmp_ipi1 {
+		compatible = "xlnx,zynqmp-ipi-mailbox";
+		interrupt-parent = <&gic>;
+		interrupts = <0 29 4>;
+		xlnx,ipi-id = <7>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		/* APU<->RPU0 IPI mailbox controller */
+		ipi_mailbox_rpu0: mailbox@ff990600 {
+			reg = <0xff990600 0x20>,
+			      <0xff990620 0x20>,
+			      <0xff9900c0 0x20>,
+			      <0xff9900e0 0x20>;
+			reg-names = "local_request_region",
+				    "local_response_region",
+				    "remote_request_region",
+				    "remote_response_region";
+			#mbox-cells = <1>;
+			xlnx,ipi-id = <1>;
+		};
+	};
+```
+
+- ipi_mailbox_rpu0: Defines the memory regions associated with the APU-to-RPU IPI mailbox, allowing inter-core messaging between the RPU and APU. The mboxes and mbox-names properties define the communication channels ("tx" and "rx").
+
+
+You can copy the `system-user.dtsi` file to the following directory within your project:
+
+```
+project-spec/meta-user/recipes-bsp/device-tree/files
+```
+
+
+
+
+
+
+rebuild with 
+
+```bash
+$ petalinux-build -c u-boot
+```
+
+
+Doku for: 
+
+```
+#define CONFIG_EXTRA_ENV_SETTINGS \
+	"autoload=no\0" \
+	"netstart=0x10000000\0"\
+	"kernelsize=0x2000000\0" \ 
+	"kernelstart=0x740000\0" \ 
+	"kernelstart_0=0x740000\0" \ 
+	"cp_kernel2ram=sf probe 0 && sf read ${netstart} ${kernelstart} ${kernelsize}\0" \
+	"default_bootcmd=run cp_kernel2ram && bootm ${netstart}\0" \
+""
+```
+
+### 6.3 Configuring the device source tree file
+
+```
+
+```
+
+
+```
+  reserved-memory {
+    #address-cells = <2>;
+    #size-cells = <2>;
+    ranges;
+    rproc_0_dma: rproc@46d00000 {
+      no-map;
+      compatible = "shared-dma-pool";
+      reg = <0x0 0x46d00000 0x0 0x100000>;
+    };
+    rproc_0_reserved: rproc@3ed00000 {
+      no-map;
+      reg = <0x0 0x3ed00000 0x0 0x8000000>;
+    };
+  };
+```
+
+- reserved-memory*: Defines memory regions that are reserved for specific purposes and should not be used by the OS for general purposes.
+- #address-cells and #size-cells: Specify the number of cells used for addresses and sizes.
+- rproc_0_dma and rproc_0_reserved: Memory regions reserved for remote processor and DMA (Direct Memory Access).
+
+```
+  zynqmp-rpu {
+    compatible = "xlnx,zynqmp-r5-remoteproc-1.0";
+    #address-cells = <2>;
+    #size-cells = <2>;
+    ranges;
+    core_conf = "split";
+    r5_0: r5@0 {
+      #address-cells = <2>;
+      #size-cells = <2>;
+      ranges;
+      memory-region = <&rproc_0_reserved>, <&rproc_0_dma>;
+      pnode-id = <0x7>;
+      mboxes = <&ipi_mailbox_rpu0 0>, <&ipi_mailbox_rpu0 1>;
+      mbox-names = "tx", "rx";
+      tcm_0_a: tcm_0@0 {
+        reg = <0x0 0xFFE00000 0x0 0x10000>;
+        pnode-id = <0xf>;
+      };
+      tcm_0_b: tcm_0@1 {
+        reg = <0x0 0xFFE20000 0x0 0x10000>;
+        pnode-id = <0x10>;
+      };
+    };
+  };
+```
+
+ZynqMP R5 Remove processor configuration: 
+
+- zynqmp-rpu: Configuration for the Zynq UltraScale+ R5 Remote Processor Unit.
+- compatible: Specifies compatibility information for the driver.
+- r5_0: Configuration for a specific core (R5) within the RPU.
+- memory-region: References reserved memory regions for the R5 core.
+- mboxes and mbox-names: Defines mailbox (IPC) configuration for inter-core communication.
+- tcm_0_a and tcm_0_b: Define on-chip memory regions for the core.
 
 
 ### 7. Add a Custom Application
@@ -168,6 +498,8 @@ $ petalinux-config -c kernel
 ```
 
 This command opens the kernel configuration menu. For now, we will leave all settings at their default values. However, it's worth taking the time to explore the various menus to familiarize yourself with the available options.
+
+Go to Device Drivers -> Device Drivers -> Remote proc drivers
 
 ### 6. Configure Root Filesystem (RootFS)
 
@@ -440,4 +772,3 @@ To boot from the SD card, follow these steps:
 3. **Power On the Board**: Switch on the board by toggling SW1.
 
 4. **Interact via UART Console**: Continue with the setup using the UART console, as described in Section 8.1.
-
