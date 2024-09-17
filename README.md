@@ -133,6 +133,7 @@ autoload=no disables the TFTP network boot option on startup.
 ```shell
 /include/ "system-conf.dtsi"
 / {
+
 	reserved-memory {
 		#address-cells = <2>;
 		#size-cells = <2>;
@@ -196,6 +197,7 @@ autoload=no disables the TFTP network boot option on startup.
 		};
 	};
 
+
 	zynqmp_ipi1 {
 		compatible = "xlnx,zynqmp-ipi-mailbox";
 		interrupt-parent = <&gic>;
@@ -219,7 +221,16 @@ autoload=no disables the TFTP network boot option on startup.
 			xlnx,ipi-id = <1>;
 		};
 	};
+
+serial@ff010000 {
+                 status = "disabled";
+                };
+aliases {
+                /delete-property/ serial1;
+        };
 };
+
+/delete-node/ &uart1;
 ```
 
 The `system-user.dtsi` file defines memory regions and their roles in the system for the ZCU102 Evaluation Board. 
@@ -341,16 +352,30 @@ This section defines the Inter-Processor Interrupt (IPI) mechanism, which facili
 
 - ipi_mailbox_rpu0: Defines the memory regions associated with the APU-to-RPU IPI mailbox, allowing inter-core messaging between the RPU and APU. The mboxes and mbox-names properties define the communication channels ("tx" and "rx").
 
+##### 6.1.5  Remove UART 1 from the device tree
 
-You can copy the `system-user.dtsi` file to the following directory within your project:
+
+To enable the R5 core to use the second UART interface, we need to remove the UART1 configuration from the A53’s device tree. This is done by adding the following lines to the system-user.dtsi file:
+
+```
+serial@ff010000 {
+                 status = "disabled";
+                };
+aliases {
+                /delete-property/ serial1;
+        };
+};
+
+/delete-node/ &uart1;
+```
+
+---
+
+Now you can copy the `system-user.dtsi` file to the following directory within your project:
 
 ```
 project-spec/meta-user/recipes-bsp/device-tree/files
 ```
-
-
-
-
 
 
 rebuild with 
@@ -373,71 +398,6 @@ Doku for:
 	"default_bootcmd=run cp_kernel2ram && bootm ${netstart}\0" \
 ""
 ```
-
-### 6.3 Configuring the device source tree file
-
-```
-
-```
-
-
-```
-  reserved-memory {
-    #address-cells = <2>;
-    #size-cells = <2>;
-    ranges;
-    rproc_0_dma: rproc@46d00000 {
-      no-map;
-      compatible = "shared-dma-pool";
-      reg = <0x0 0x46d00000 0x0 0x100000>;
-    };
-    rproc_0_reserved: rproc@3ed00000 {
-      no-map;
-      reg = <0x0 0x3ed00000 0x0 0x8000000>;
-    };
-  };
-```
-
-- reserved-memory*: Defines memory regions that are reserved for specific purposes and should not be used by the OS for general purposes.
-- #address-cells and #size-cells: Specify the number of cells used for addresses and sizes.
-- rproc_0_dma and rproc_0_reserved: Memory regions reserved for remote processor and DMA (Direct Memory Access).
-
-```
-  zynqmp-rpu {
-    compatible = "xlnx,zynqmp-r5-remoteproc-1.0";
-    #address-cells = <2>;
-    #size-cells = <2>;
-    ranges;
-    core_conf = "split";
-    r5_0: r5@0 {
-      #address-cells = <2>;
-      #size-cells = <2>;
-      ranges;
-      memory-region = <&rproc_0_reserved>, <&rproc_0_dma>;
-      pnode-id = <0x7>;
-      mboxes = <&ipi_mailbox_rpu0 0>, <&ipi_mailbox_rpu0 1>;
-      mbox-names = "tx", "rx";
-      tcm_0_a: tcm_0@0 {
-        reg = <0x0 0xFFE00000 0x0 0x10000>;
-        pnode-id = <0xf>;
-      };
-      tcm_0_b: tcm_0@1 {
-        reg = <0x0 0xFFE20000 0x0 0x10000>;
-        pnode-id = <0x10>;
-      };
-    };
-  };
-```
-
-ZynqMP R5 Remove processor configuration: 
-
-- zynqmp-rpu: Configuration for the Zynq UltraScale+ R5 Remote Processor Unit.
-- compatible: Specifies compatibility information for the driver.
-- r5_0: Configuration for a specific core (R5) within the RPU.
-- memory-region: References reserved memory regions for the R5 core.
-- mboxes and mbox-names: Defines mailbox (IPC) configuration for inter-core communication.
-- tcm_0_a and tcm_0_b: Define on-chip memory regions for the core.
-
 
 ### 7. Add a Custom Application
 
@@ -488,6 +448,7 @@ do_install() {
 ```
 
 In the files directory, you will find `myapp.cpp` and a `Makefile` that you can modify to configure your application.
+
 
 ### 7 . Configure the kernel
 
@@ -772,3 +733,160 @@ To boot from the SD card, follow these steps:
 3. **Power On the Board**: Switch on the board by toggling SW1.
 
 4. **Interact via UART Console**: Continue with the setup using the UART console, as described in Section 8.1.
+
+### 9. Steps to build the RPU firmware
+
+1. **Open Vitis:**
+   - Launch Vitis IDE via Vivado by navigating to **Tools -> Launch Vitis IDE**.
+
+2. **Create a New Application:**
+   - Go to **File -> New -> Application**.
+
+3. **Select Platform from XSA:**
+   - Choose the option **"Create a new platform from XSA"** and select the previously exported XSA file.
+   - Choose **`psu_cortexr5_0`** as the processor and click **Next**.
+   - On the next screen, again select **`psu_cortexr5_0`**, and assign a name to your application.
+
+   ![Vitis Select CPU](documentation/figures/vitis_select_cpu.png)
+
+4. **Configure the Application:**
+   - Click **Next** without making any changes.
+   - On the next screen, choose a sample application to build, such as **Hello World**.
+   - Click **Finish**.
+
+5. **Modify BSP Settings:**
+   - On the left side, in the **Assistant Window**, find your application and right-click to select **"Navigate to BSP Settings"**.
+
+   ![Assistant Window](documentation/figures/assistant_window.png)
+
+6. **Set Up UART in BSP:**
+   - In the **BSP Settings**, under **`standalone_psu_cortexr5_0`**, select **Board Support Package** and click **Modify BSP Settings**.
+   - Go to the **Standalone** tab and set both **stdin** and **stdout** to **`psu_uart_1`**.
+
+   ![Select UART](documentation/figures/select_uart.png)
+
+7. **Update Linker Script:**
+   - Exit the BSP menu and navigate to the `src` folder of your project.
+   - Open the linker script (`ldscript.ld`).
+
+   To prevent memory overlap between the R5 and A53 processors in the shared DRAM, modify the base address of **`psu_r5_ddr_0_MEM_0`** to map it to the memory area defined in the device tree as `rproc_0_reserved`:
+
+   ```dts
+   rproc_0_reserved: rproc@3ed00000 {
+       no-map;
+       reg = <0x0 0x3ed00000 0x0 0x40000>;
+   };
+   ```
+
+   ![Select UART](documentation/figures/linker_vitis.png)
+
+We can keep the remaining settings unchanged and build our application:
+
+```shell
+17:00:43 **** Incremental Build of configuration Debug for project r5_echo ****
+make all 
+Building target: r5_echo.elf
+Invoking: ARM R5 gcc linker
+armr5-none-eabi-gcc -mcpu=cortex-r5  -mfloat-abi=hard  -mfpu=vfpv3-d16 -Wl,-T -Wl,../src/lscript.ld -L/home/florianfrank/Documents/asoa_package_filtering_root/zcu_102_petalinux_setup/vitis/zcu_102_sgmii_sfp/export/zcu_102_sgmii_sfp/sw/zcu_102_sgmii_sfp/standalone_psu_cortexr5_0/bsplib/lib -o "r5_echo.elf" ./src/helloworld.o ./src/platform.o   -Wl,--start-group,-lxil,-lgcc,-lc,--end-group
+Finished building target: r5_echo.elf
+ 
+Invoking: ARM R5 Print Size
+armr5-none-eabi-size r5_echo.elf  |tee "r5_echo.elf.size"
+   text	   data	    bss	    dec	    hex	filename
+   7280	   1528	  22572	  31380	   7a94	r5_echo.elf
+Finished building: r5_echo.elf.size
+ 
+
+17:00:43 Build Finished (took 167ms)
+```
+
+You should see the output above. Locate the generated ELF file, named `r5_echo.elf`, in the *Release* or *Debug* folder of your project.
+
+### 9. Start the RPU from Petalinux
+
+After starting petalinux, as explained in Section 8, make sure you have a folder `/sys/class/remoteproc/remoteproc0`available. If this is not case you probably have missconfigured the device tree as explained in Section 6.1 
+
+  - 9.1 Check if remoteproc is available:
+
+    ```bash
+    # ls /sys/class/remoteproc/remoteproc0
+    coredump dev device firmware name power recovery state subsystem uevent
+    ```
+
+    - **coredump:** This file or directory is used for accessing the core dump of the remote processor. A core dump is a file that captures the memory contents of a running process at a specific point in time, usually when the process crashes.
+
+    - **dev:** This file or directory represents the device node associated with the remote processor. It can be used to interact with the hardware device.
+
+    - **device:** This file or directory provides information about the device associated with the remote processor. It may contain attributes such as the device name or other metadata.
+
+    - **firmware:** This file or directory is used to load or interact with the firmware for the remote processor. Firmware is the software that is embedded in the hardware to control its operations.
+
+    - **name:** This file contains the name of the remote processor as recognized by the system.
+
+    - **power:** This directory or file is used to manage power states and control power-related operations for the remote processor.
+
+    - **recovery:** This file or directory might be related to recovery operations or states of the remote processor, such as recovery from a fault or error.
+
+    - **state:** This file indicates the current state of the remote processor (e.g., running, stopped, or suspended).
+
+    - **subsystem:** This file or directory provides information about the subsystem to which the remote processor belongs.
+
+    - **uevent:** This file provides information about uevents (userspace events) related to the remote processor. Uevents are used by the kernel to send notifications about changes in device state to userspace.
+
+  - 9.2 Load the Remote Processor Kernel Module
+
+    The `zynqmp_r5_remoteproc` kernel module is required to manage the R5 processors as specified in the device tree.
+
+    To load the module, use the following command:
+
+    ```bash
+    modprobe zynqmp_r5_remoteproc
+    ```
+
+    If the command executes successfully, it will not produce any output.
+
+
+  - 9.3 Copy the Firmware to Your Device
+
+    To use the R5 processors, you need to copy the firmware to your device. You can do this in several ways. One common method is to use scp after obtaining the IP address from the axi_ethernet interface. Another way is directly adding it to the rootfs on the SD-card.
+
+    The firmware must be copied to a folder `/lib/firmware`. 
+    Simply remove the .elf prefix from the file. 
+
+  - 9.4 Select your kernel module by executing 
+
+    ```
+    echo r5_echo > /sys/class/remoteproc/remoteproc0/firmware
+    ``` 
+
+  - 9.5 Start the Firmware
+
+  Start the firmware with the following command. Ensure that you have a terminal open on `/dev/ttyUSB1` using the settings specified in Section 8.1.
+
+    ```
+      echo start > /sys/class/remoteproc/remoteproc0/state
+    ```
+
+  After executing this command, check the status of the remote processor by running:
+
+  ```
+  # cat /sys/class/remoteproc/remoteproc0/state
+  ```
+
+  you should see `running`.
+
+
+
+   ![Select UART](documentation/figures/start_r5.png)
+
+  At this point, you should be able to see the RPU output on /dev/ttyUSB1.
+
+
+  - 9.6 Stop the Firmware
+
+  To stop the firmware just execute
+
+
+    ```
+      echo stop > /sys/class/remoteproc/remoteproc0/state
+    ```
