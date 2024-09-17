@@ -275,6 +275,18 @@ This configuration ensures that specific memory regions are reserved for hardwar
   - **Size**: 256 kB
   - **Purpose**: Reserved for the RPU's remote processor operations, storing essential code or data needed during runtime execution.
 
+  Based on the memory fragmentation of the Ultrascale+
+
+| Region                                | Base Address | Size         | Description                              |
+|---------------------------------------|--------------|--------------|------------------------------------------|
+| DDR4 Memory (External)                | 0x00000000   | Up to 4GB    | Main system memory                       |
+| PL Configuration Memory                | 0xFC000000   | 64MB          | FPGA configuration space                 |
+| PS Peripheral Registers                | 0xF8000000   | 256MB         | Peripherals, such as GPIO, UART, etc.    |
+| R5 Processor Unit (RPU) Memory         | 0x3ED00000   | 128KB (per core) | R5 processor-specific memory             |
+| ARM Cortex-A53 Processor Unit (APU) Memory | 0xF0000000 | 1GB           | ARM Cortex-A53 memory                    |
+| Reserved/Unused Memory                 | Varies       | Varies        | Reserved or unused memory                |
+
+
 
 ##### 6.1.2 TCM (Tightly Coupled Memory) Configuration
 
