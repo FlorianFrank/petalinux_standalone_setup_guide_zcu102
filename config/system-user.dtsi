@@ -1,5 +1,6 @@
 /include/ "system-conf.dtsi"
 / {
+
 	reserved-memory {
 		#address-cells = <2>;
 		#size-cells = <2>;
@@ -87,4 +88,14 @@
 			xlnx,ipi-id = <1>;
 		};
 	};
+
+serial@ff010000 {
+                 status = "disabled";
+                };
+aliases {
+                /delete-property/ serial1;
+        };
 };
+
+/delete-node/ &uart1;
+
